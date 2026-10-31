@@ -59,6 +59,6 @@ impl AssetLoader for ClientAssetLoader {
     }
 
     fn extensions(&self) -> &[&str] {
-        &["client.toml"]
+        &["toml"]
     }
 }

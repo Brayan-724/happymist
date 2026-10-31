@@ -31,6 +31,8 @@ impl Client {
 
 #[derive(Component)]
 pub struct LoadedClient(Handle<ClientAsset>);
+#[derive(Component)]
+pub struct LoadingClient(Handle<ClientAsset>);
 
 const APPROACHING_TIME: f32 = 4.;
 const APPROACHING_MIN: Vec2 = vec2(50., 50.);
@@ -47,16 +49,21 @@ pub struct ClientApproached(Entity);
 
 fn load_client(
     mut commands: Commands,
-    query: Query<(Entity, &Client), Without<LoadedClient>>,
+    query: Query<(Entity, &Client, Option<&LoadingClient>), Without<LoadedClient>>,
     asset_server: Res<AssetServer>,
     assets: Res<Assets<ClientAsset>>,
 ) {
-    for (entity, client) in query {
-        let asset = asset_server.load(client.get_client_file());
-        let is_loaded = assets.get(asset.id()).is_some();
+    for (entity, client, loading_asset) in query {
+        let Some(LoadingClient(asset)) = loading_asset else {
+            let asset = asset_server.load::<ClientAsset>(client.get_client_file());
+            commands.entity(entity).insert(LoadingClient(asset));
+            continue;
+        };
+
+        let is_loaded = assets.get(asset).is_some();
 
         if is_loaded {
-            commands.entity(entity).insert(LoadedClient(asset));
+            commands.entity(entity).insert(LoadedClient(asset.clone()));
         }
     }
 }
