@@ -1,0 +1,12 @@
+name = "Ñoquer"
+sprite = "ñoquer.jpg"
+
+[[task]]
+id = "teeth"
+request = "teeth"
+
+[[task.dialogue]]
+text = "Hi"
+
+[[task.dialogue]]
+text = "Soy el ñoquer"
