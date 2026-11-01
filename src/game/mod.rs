@@ -4,6 +4,8 @@ use crate::GAME_HEIGHT;
 use crate::client::Client;
 use crate::scene::Scene;
 
+mod play;
+
 #[derive(SubStates, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[source(Scene = Scene::Game)]
 pub enum GameState {
@@ -14,9 +16,9 @@ pub enum GameState {
 
 pub fn plugin(app: &mut App) {
     app.add_sub_state::<GameState>()
+        .add_plugins(play::plugin)
         .add_systems(OnEnter(Scene::Game), setup)
-        .add_systems(OnEnter(GameState::Dialogue), enter_dialogue)
-        .add_systems(OnEnter(GameState::Game), enter_game);
+        .add_systems(OnEnter(GameState::Dialogue), enter_dialogue);
 }
 
 fn enter_dialogue(mut commands: Commands, assets: Res<AssetServer>) {
@@ -37,12 +39,7 @@ fn enter_dialogue(mut commands: Commands, assets: Res<AssetServer>) {
     ));
 }
 
-fn enter_game(mut commands: Commands) {
-    commands.spawn((Text::new("Game"), DespawnOnExit(GameState::Game)));
-}
-
-fn setup(mut commands: Commands) {
-    commands.spawn((Text::new("Playing State"),));
-}
+// To use
+fn setup(mut commands: Commands) {}
 
 fn update() {}

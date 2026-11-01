@@ -8,6 +8,7 @@ mod dialogue;
 mod game;
 mod main_menu;
 mod scene;
+mod ui;
 
 pub const GAME_WIDTH: f32 = 1980.;
 pub const GAME_HEIGHT: f32 = 1080.;
@@ -18,7 +19,7 @@ fn main() -> AppExit {
         .add_plugins(scene::plugin)
         .add_plugins(EguiPlugin::default())
         .add_plugins(WorldInspectorPlugin::new())
-        .add_plugins((dialogue::plugin, client::plugin))
+        .add_plugins((ui::plugin, dialogue::plugin, client::plugin))
         .add_systems(Startup, setup)
         .run()
 }
