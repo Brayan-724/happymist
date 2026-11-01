@@ -9,6 +9,8 @@ use bevy::{
     ui::{Node, widget::Text},
 };
 
+use crate::GAME_HEIGHT;
+use crate::client::Client;
 use crate::scene::Scene;
 
 #[derive(SubStates, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -26,10 +28,21 @@ pub fn plugin(app: &mut App) {
         .add_systems(OnEnter(GameState::Game), enter_game);
 }
 
-fn enter_dialogue(mut commands: Commands) {
+fn enter_dialogue(mut commands: Commands, assets: Res<AssetServer>) {
     commands.spawn((
         Text::new("Dialogue"),
         DespawnOnExit(GameState::Dialogue), // gone when you switch to GameState::Game
+    ));
+
+    commands.spawn(Client::Ñoquer);
+
+    commands.spawn((
+        Sprite {
+            image: assets.load("ñoquer.jpg"),
+            custom_size: Some(vec2(1800., 250.)),
+            ..default()
+        },
+        Transform::from_translation(Vec3::new(0., -(GAME_HEIGHT / 2. - 250. / 2.), 1.)),
     ));
 }
 

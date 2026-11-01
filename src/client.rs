@@ -1,11 +1,14 @@
 use core::f32;
 
-use bevy::prelude::*;
+use bevy::{log, prelude::*};
 
-pub use self::loader::ClientAsset;
-use self::loader::ClientAssetLoader;
+use crate::dialogue::DialogueId;
+
+use self::loader::{ClientAsset, ClientAssetLoader};
+use self::task::TaskId;
 
 mod loader;
+pub mod task;
 
 pub fn plugin(app: &mut App) {
     app.init_asset::<ClientAsset>()
@@ -13,12 +16,18 @@ pub fn plugin(app: &mut App) {
         .add_systems(
             Update,
             (load_client, setup_client, update_approaching).chain(),
-        );
+        )
+        .add_observer(on_client_approached);
 }
 
 #[derive(Component, Clone, Copy, Debug)]
 pub enum Client {
     Ñoquer,
+}
+
+#[derive(Component, Clone, Debug)]
+pub struct ClientDetails {
+    pub name: String,
 }
 
 impl Client {
@@ -34,10 +43,10 @@ pub struct LoadedClient(Handle<ClientAsset>);
 #[derive(Component)]
 pub struct LoadingClient(Handle<ClientAsset>);
 
-const APPROACHING_TIME: f32 = 4.;
-const APPROACHING_MIN: Vec2 = vec2(50., 50.);
-const APPROACHING_MAX: Vec2 = vec2(350., 350.);
-const APPROACHING_BOUNCE: f32 = 8.;
+const APPROACHING_TIME: f32 = 3.;
+const APPROACHING_MIN: Vec2 = vec2(150., 150.);
+const APPROACHING_MAX: Vec2 = vec2(550., 550.);
+const APPROACHING_BOUNCE: f32 = 7.;
 
 #[derive(Component, Default)]
 pub struct ClientApproaching {
@@ -46,6 +55,12 @@ pub struct ClientApproaching {
 
 #[derive(EntityEvent)]
 pub struct ClientApproached(Entity);
+
+#[derive(Component, Reflect)]
+pub struct ClientTasking(pub TaskId);
+
+#[derive(Component, Reflect)]
+pub struct ClientTalking(pub DialogueId);
 
 fn load_client(
     mut commands: Commands,
@@ -60,10 +75,15 @@ fn load_client(
             continue;
         };
 
-        let is_loaded = assets.get(asset).is_some();
+        let loaded_client = assets.get(asset);
 
-        if is_loaded {
-            commands.entity(entity).insert(LoadedClient(asset.clone()));
+        if let Some(loaded_client) = loaded_client {
+            commands.entity(entity).insert((
+                LoadedClient(asset.clone()),
+                ClientDetails {
+                    name: loaded_client.name.clone(),
+                },
+            ));
         }
     }
 }
@@ -94,24 +114,53 @@ fn setup_client(
 fn update_approaching(
     mut commands: Commands,
     time: Res<Time>,
-    mut query: Query<(Entity, &mut Sprite, &mut Transform, &mut ClientApproaching)>,
+    query: Query<(Entity, &mut Sprite, &mut Transform, &mut ClientApproaching)>,
 ) {
-    let Ok((client, mut sprite, mut transform, mut approaching)) = query.single_mut() else {
+    for (client, mut sprite, mut transform, mut approaching) in query {
+        let t = approaching.elapsed / APPROACHING_TIME;
+
+        approaching.elapsed += time.delta_secs();
+
+        sprite.custom_size = Some(APPROACHING_MIN.lerp(
+            APPROACHING_MAX,
+            EaseFunction::SmoothStepIn.sample_unchecked(t),
+        ));
+
+        transform.translation.y =
+            (t * f32::consts::PI * APPROACHING_BOUNCE).sin().abs() * 50. - 200.;
+
+        if t > 1. {
+            commands
+                .entity(client)
+                .remove::<ClientApproaching>()
+                .trigger(ClientApproached);
+        }
+    }
+}
+
+fn on_client_approached(
+    event: On<ClientApproached>,
+    mut commands: Commands,
+    query: Query<&LoadedClient>,
+    assets: Res<Assets<ClientAsset>>,
+) {
+    let Ok(client) = query.get(event.0) else {
         return;
     };
 
-    let t = approaching.elapsed / APPROACHING_TIME;
+    let Some(client) = assets.get(&client.0) else {
+        return;
+    };
 
-    approaching.elapsed += time.delta_secs();
+    let task_id = TaskId(1);
+    let dialogue_id = DialogueId(task_id, 0);
 
-    sprite.custom_size = Some(APPROACHING_MIN.lerp(APPROACHING_MAX, t));
-
-    transform.translation.y = (t * f32::consts::PI * APPROACHING_BOUNCE).sin().abs() * 100. - 200.;
-
-    if t > 1. {
-        commands
-            .entity(client)
-            .remove::<ClientApproaching>()
-            .trigger(ClientApproached);
+    if client.get_dialogue(dialogue_id).is_none() {
+        log::warn!("Check configuration of clients, {dialogue_id} no dialogue found");
+        return;
     }
+
+    commands
+        .entity(event.0)
+        .insert((ClientTasking(task_id), ClientTalking(dialogue_id)));
 }

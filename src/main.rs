@@ -3,8 +3,6 @@ use bevy::prelude::*;
 use bevy_inspector_egui::bevy_egui::EguiPlugin;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
-use self::client::Client;
-
 mod client;
 mod dialogue;
 mod game;
@@ -25,7 +23,7 @@ fn main() -> AppExit {
         .run()
 }
 
-fn setup(mut commands: Commands, assets: Res<AssetServer>) {
+fn setup(mut commands: Commands) {
     commands.spawn((
         Camera2d,
         Projection::Orthographic(OrthographicProjection {
@@ -35,16 +33,5 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>) {
             },
             ..OrthographicProjection::default_2d()
         }),
-    ));
-
-    commands.spawn(Client::Ñoquer);
-
-    commands.spawn((
-        Sprite {
-            image: assets.load("ñoquer.jpg"),
-            custom_size: Some(vec2(1800., 250.)),
-            ..default()
-        },
-        Transform::from_translation(Vec3::new(0., -(GAME_HEIGHT / 2. - 250. / 2.), 1.)),
     ));
 }

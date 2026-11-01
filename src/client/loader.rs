@@ -5,6 +5,8 @@ use bevy::reflect::{Reflect, TypePath};
 use serde::Deserialize;
 use thiserror::Error;
 
+use crate::dialogue::DialogueId;
+
 #[derive(Asset, Reflect, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ClientAsset {
@@ -12,6 +14,12 @@ pub struct ClientAsset {
     pub sprite: PathBuf,
     #[serde(rename = "task")]
     pub tasks: Vec<ClientTaskAsset>,
+}
+
+impl ClientAsset {
+    pub fn get_dialogue(&self, dialogue: DialogueId) -> Option<&ClientTaskDialogueAsset> {
+        self.tasks.get(dialogue.0.0)?.dialogues.get(dialogue.1)
+    }
 }
 
 #[derive(Reflect, Deserialize)]
