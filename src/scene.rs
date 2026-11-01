@@ -1,4 +1,7 @@
-use bevy::{app::App, state::{app::AppExtStates, state::States}};
+use bevy::{
+    app::App,
+    state::{app::AppExtStates, state::States},
+};
 
 use crate::{game, main_menu};
 

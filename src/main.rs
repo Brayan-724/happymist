@@ -7,10 +7,9 @@ use self::client::Client;
 
 mod client;
 mod dialogue;
-mod scene;
 mod game;
 mod main_menu;
-
+mod scene;
 
 pub const GAME_WIDTH: f32 = 1980.;
 pub const GAME_HEIGHT: f32 = 1080.;
