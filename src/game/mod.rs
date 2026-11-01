@@ -22,10 +22,7 @@ pub fn plugin(app: &mut App) {
 }
 
 fn enter_dialogue(mut commands: Commands, assets: Res<AssetServer>) {
-    commands.spawn((
-        Text::new("Dialogue"),
-        DespawnOnExit(GameState::Dialogue), // gone when you switch to GameState::Game
-    ));
+    commands.spawn((Text::new("Dialogue"), DespawnOnExit(GameState::Dialogue)));
 
     commands.spawn(Client::Ñoquer);
 

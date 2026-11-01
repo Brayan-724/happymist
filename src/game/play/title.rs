@@ -3,7 +3,10 @@ use bevy::{
     prelude::*,
 };
 
-use crate::game::{GameState, play::PlayPhase};
+use crate::{
+    game::{GameState, play::PlayPhase},
+    ui::anim::SlideOut,
+};
 
 const TILE_STRETCH: f32 = 20.;
 const TILE_SIZE: f32 = 16. * TILE_STRETCH;
@@ -36,10 +39,13 @@ pub fn plugin(app: &mut App) {
     app.add_systems(OnEnter(PlayPhase::Title), setup)
         .add_systems(
             Update,
-            (update, scroll_background, oscillate, title_sequence)
-                .run_if(in_state(PlayPhase::Title)),
-        );
+            (update, oscillate, title_sequence).run_if(in_state(PlayPhase::Title)),
+        )
+        .add_systems(Update, scroll_background);
 }
+
+#[derive(Component)]
+struct TitleRoot;
 
 fn setup(mut commands: Commands, assets: Res<AssetServer>) {
     let image = assets
@@ -48,7 +54,9 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>) {
         .load("sprites/background/title-bg.png");
 
     commands.spawn((
-        DespawnOnExit(PlayPhase::Title),
+        TitleRoot,
+        GlobalZIndex(1),
+        DespawnOnExit(GameState::Game),
         Node {
             width: percent(100),
             height: percent(100),
@@ -97,7 +105,6 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>) {
                 },
             )
         ],
-        DespawnOnExit(GameState::Game),
     ));
 }
 
@@ -143,6 +150,7 @@ fn title_sequence(
     time: Res<Time>,
     mut next: ResMut<NextState<PlayPhase>>,
     mut query: Query<(Entity, &mut TitleSequence, &mut Text)>,
+    roots: Query<Entity, With<TitleRoot>>,
 ) {
     for (entity, mut sequence, mut text) in &mut query {
         sequence.elapsed += time.delta_secs();
@@ -154,6 +162,9 @@ fn title_sequence(
 
         let step = (countdown_elapsed / COUNTDOWN_STEP) as u32;
         if step >= COUNTDOWN_FROM {
+            for root in &roots {
+                commands.entity(root).insert(SlideOut::random(0.6));
+            }
             next.set(PlayPhase::Minigame);
             continue;
         }

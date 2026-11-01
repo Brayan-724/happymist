@@ -11,7 +11,7 @@ pub struct TimeBar(pub Timer);
 struct TimeBarFill;
 
 #[derive(EntityEvent)]
-pub struct TimeBarFinished(Entity);
+pub struct TimeBarFinished(pub Entity);
 
 pub fn time_bar(seconds: f32) -> impl Bundle {
     (
