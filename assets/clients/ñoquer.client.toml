@@ -1,4 +1,4 @@
-name = "Ñoquer"
+name = "Noquer"
 sprite = "ñoquer.jpg"
 
 [[task]]
@@ -6,7 +6,13 @@ id = "teeth"
 request = "teeth"
 
 [[task.dialogue]]
-text = "Hi"
+text = "Batman me ponen nientes manana"
 
 [[task.dialogue]]
-text = "Soy el ñoquer"
+text = "Batman ya tengo dientes"
+
+[[task.dialogue]]
+text = "* Le estrujan el cuello *"
+
+[[task.dialogue]]
+text = "Hi this is a very long text to tesHi this is a very long text to tesHi this is a very long text to tesHi this is a very long"

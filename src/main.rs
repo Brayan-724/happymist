@@ -16,10 +16,9 @@ pub const GAME_HEIGHT: f32 = 1080.;
 fn main() -> AppExit {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(scene::plugin)
         .add_plugins(EguiPlugin::default())
         .add_plugins(WorldInspectorPlugin::new())
-        .add_plugins((ui::plugin, dialogue::plugin, client::plugin))
+        .add_plugins((ui::plugin, scene::plugin, dialogue::plugin, client::plugin))
         .add_systems(Startup, setup)
         .run()
 }

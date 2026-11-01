@@ -2,7 +2,8 @@ use core::f32;
 
 use bevy::{log, prelude::*};
 
-use crate::dialogue::DialogueId;
+use crate::dialogue::{Dialogue, DialogueAnimated, DialogueId, NextDialogue};
+use crate::game::GameState;
 
 use self::loader::{ClientAsset, ClientAssetLoader};
 use self::task::TaskId;
@@ -15,9 +16,12 @@ pub fn plugin(app: &mut App) {
         .init_asset_loader::<ClientAssetLoader>()
         .add_systems(
             Update,
-            (load_client, setup_client, update_approaching).chain(),
+            (load_client, setup_client, update_approaching)
+                .chain()
+                .run_if(in_state(GameState::Dialogue)),
         )
-        .add_observer(on_client_approached);
+        .add_observer(on_client_approached.run_if(in_state(GameState::Dialogue)))
+        .add_observer(on_next_dialogue.run_if(in_state(GameState::Dialogue)));
 }
 
 #[derive(Component, Clone, Copy, Debug)]
@@ -141,26 +145,71 @@ fn update_approaching(
 fn on_client_approached(
     event: On<ClientApproached>,
     mut commands: Commands,
-    query: Query<&LoadedClient>,
+    query: Query<(&ClientDetails, &LoadedClient)>,
     assets: Res<Assets<ClientAsset>>,
 ) {
-    let Ok(client) = query.get(event.0) else {
+    let Ok((client, client_asset)) = query.get(event.0) else {
         return;
     };
 
-    let Some(client) = assets.get(&client.0) else {
+    let Some(client_asset) = assets.get(&client_asset.0) else {
         return;
     };
 
-    let task_id = TaskId(1);
+    let task_id = TaskId(0);
     let dialogue_id = DialogueId(task_id, 0);
 
-    if client.get_dialogue(dialogue_id).is_none() {
+    let Some(dialogue) = client_asset.get_dialogue(dialogue_id) else {
         log::warn!("Check configuration of clients, {dialogue_id} no dialogue found");
         return;
-    }
+    };
 
     commands
         .entity(event.0)
         .insert((ClientTasking(task_id), ClientTalking(dialogue_id)));
+
+    commands.spawn((
+        dialogue_id,
+        Dialogue {
+            name: client.name.clone(),
+            text_len: dialogue.text.len(),
+            text: dialogue.text.clone().into_chars(),
+            font_size: 18.,
+        },
+        DialogueAnimated::default(),
+    ));
+}
+
+fn on_next_dialogue(
+    event: On<NextDialogue>,
+    mut commands: Commands,
+    client: Single<(&ClientDetails, &LoadedClient)>,
+    query_dialogues: Query<&DialogueId>,
+    assets: Res<Assets<ClientAsset>>,
+) {
+    commands.entity(event.0).despawn();
+
+    let Ok(dialogue_id) = query_dialogues.get(event.0) else {
+        return;
+    };
+
+    let (client, client_asset) = *client;
+    let Some(client_asset) = assets.get(&client_asset.0) else {
+        return;
+    };
+
+    let dialogue_id = DialogueId(dialogue_id.0, dialogue_id.1 + 1);
+
+    if let Some(dialogue) = client_asset.get_dialogue(dialogue_id) {
+        commands.spawn((
+            dialogue_id,
+            Dialogue {
+                name: client.name.clone(),
+                text_len: dialogue.text.len(),
+                text: dialogue.text.clone().into_chars(),
+                font_size: 18.,
+            },
+            DialogueAnimated::default(),
+        ));
+    }
 }

@@ -9,8 +9,8 @@ mod play;
 #[derive(SubStates, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[source(Scene = Scene::Game)]
 pub enum GameState {
-    Dialogue,
     #[default]
+    Dialogue,
     Game,
 }
 
