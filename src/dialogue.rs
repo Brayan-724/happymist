@@ -1,5 +1,4 @@
-use core::fmt;
-use std::string::IntoChars;
+use core::{f32, fmt};
 
 use bevy::color::palettes::tailwind;
 use bevy::ecs::lifecycle::HookContext;
@@ -16,7 +15,12 @@ pub mod parser;
 pub fn plugin(app: &mut App) {
     app.add_systems(
         Update,
-        (update_dialogue_animation, update_dialogue_char_animation),
+        (
+            update_dialogue_animation,
+            update_dialogue_char_animation,
+            update_dancing_anim,
+        )
+            .run_if(is_dialogue_active),
     )
     .add_observer(setup_dialogue)
     .add_observer(handle_click.run_if(is_dialogue_active));
@@ -51,10 +55,14 @@ pub enum DialogueState {
 #[derive(Component)]
 struct DialogueText(Entity);
 
+#[derive(Component)]
+struct DialogueContainer(Entity);
+
 #[derive(Component, Default)]
 pub struct DialogueAnimated {
     pub elapsed: f32,
     pub next_char: f32,
+    pub chars_advanced: usize,
 }
 
 #[derive(Component)]
@@ -85,6 +93,8 @@ fn setup_dialogue(event: On<Add<Dialogue>>, mut commands: Commands, query: Query
 
     let text = commands.spawn(Text(String::new())).id();
 
+    let container = commands.spawn(Node::default()).add_child(text).id();
+
     commands
         .spawn((
             LifetimeShared(event.entity),
@@ -112,11 +122,13 @@ fn setup_dialogue(event: On<Add<Dialogue>>, mut commands: Commands, query: Query
                 ..default()
             },
         ))
-        .add_child(text);
+        .add_child(container);
 
-    commands
-        .entity(event.entity)
-        .insert((DialogueState::Presenting, DialogueText(text)));
+    commands.entity(event.entity).insert((
+        DialogueState::Presenting,
+        DialogueText(text),
+        DialogueContainer(container),
+    ));
 }
 
 const TIME_PER_CHAR: f32 = 0.08;
@@ -132,20 +144,24 @@ fn update_dialogue_animation(
         &mut DialogueState,
         &mut Dialogue,
         &mut DialogueAnimated,
-        &DialogueText,
+        &mut DialogueText,
+        &DialogueContainer,
     )>,
+    mut texts: Query<(&mut Text, &Children)>,
 ) {
-    for (dialogue_entity, mut state, mut dialogue, mut animation, text) in query {
+    for (dialogue_entity, mut state, mut dialogue, mut animation, mut text, container) in query {
         let max_t = (dialogue.content.len as f32 * TIME_PER_CHAR).clamp(MIN_TIME, MAX_TIME);
         let time_per_char = max_t / dialogue.content.len as f32;
 
         if animation.elapsed >= animation.next_char {
+            let target_font = dialogue.font_size;
+
             let chars_to_advance = ((animation.elapsed.min(max_t) - animation.next_char)
                 / time_per_char)
                 .ceil() as usize;
 
             let mut i = 0;
-            while i < (chars_to_advance + 1) {
+            while i < chars_to_advance.max(1) {
                 dialogue.segment = dialogue
                     .segment
                     .take()
@@ -164,10 +180,10 @@ fn update_dialogue_animation(
 
                 if let Some(char) = segment.chars.next() {
                     i += 1;
+                    animation.chars_advanced += 1;
                     animation.next_char += time_per_char;
 
-                    commands.entity(text.0).with_child((
-                        TextSpan::new(char),
+                    let base = (
                         TextFont {
                             font: FontSource::Handle(
                                 fonts.get(segment.style.bold, segment.style.italic),
@@ -177,10 +193,34 @@ fn update_dialogue_animation(
                         },
                         DialogueCharAnimation {
                             elapsed: if is_last { 0. } else { CHAR_TIME },
-                            target_font: dialogue.font_size,
+                            target_font,
                         },
-                        UiTransform::default(),
-                    ));
+                    );
+
+                    if segment.style.dancing {
+                        let is_empty = texts
+                            .get_mut(text.0)
+                            .ok()
+                            .filter(|(t, c)| t.is_empty() && c.is_empty());
+
+                        if let Some((mut text_ref, _)) = is_empty {
+                            text_ref.0 = char.into();
+                        } else {
+                            text.0 = commands.spawn((Text::new(char), base)).id();
+                            commands.entity(container.0).add_child(text.0);
+                        }
+
+                        commands
+                            .entity(text.0)
+                            .insert(DialogueDancingAnim(animation.chars_advanced));
+
+                        text.0 = commands.spawn(Text::default()).id();
+                        commands.entity(container.0).add_child(text.0);
+                    } else {
+                        commands
+                            .entity(text.0)
+                            .with_child((TextSpan::new(char), base));
+                    }
                 } else {
                     _ = dialogue.segment.take();
                 }
@@ -191,7 +231,7 @@ fn update_dialogue_animation(
     }
 }
 
-const CHAR_TIME: f32 = 1.;
+const CHAR_TIME: f32 = 0.4;
 
 #[derive(Component)]
 struct DialogueCharAnimation {
@@ -202,14 +242,9 @@ struct DialogueCharAnimation {
 fn update_dialogue_char_animation(
     mut commands: Commands,
     time: Res<Time>,
-    query: Query<(
-        Entity,
-        &mut TextFont,
-        &mut DialogueCharAnimation,
-        &mut UiTransform,
-    )>,
+    query: Query<(Entity, &mut TextFont, &mut DialogueCharAnimation)>,
 ) {
-    for (entity, mut text_font, mut animation, mut trans) in query {
+    for (entity, mut text_font, mut animation) in query {
         animation.elapsed += time.delta_secs();
 
         let new_size = 0.0
@@ -221,11 +256,30 @@ fn update_dialogue_char_animation(
 
         text_font.font_size = FontSize::Px(new_size);
 
-        trans.translation.x = percent(0.0.lerp(50., animation.elapsed / CHAR_TIME));
-
         if animation.elapsed > CHAR_TIME {
             commands.entity(entity).remove::<DialogueCharAnimation>();
         }
+    }
+}
+
+const DANCING_SPEED: f32 = 2.3;
+const DANCING_DIFF: f32 = 0.6;
+
+#[derive(Component)]
+struct DialogueDancingAnim(usize);
+
+fn update_dancing_anim(
+    time: Res<Time>,
+    query: Query<(&mut UiTransform, &DialogueDancingAnim)>,
+) {
+    for (mut trans, animation) in query {
+        let offset_t = animation.0 as f32 * DANCING_DIFF;
+
+        let t = ((time.elapsed_secs() + offset_t) % DANCING_SPEED) / DANCING_SPEED;
+
+        let new_y = (t * f32::consts::PI * 2.).sin();
+
+        trans.translation.y = px(new_y);
     }
 }
 
