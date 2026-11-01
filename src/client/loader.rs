@@ -2,12 +2,14 @@ use std::path::PathBuf;
 
 use bevy::asset::{Asset, AssetLoader, AsyncReadExt};
 use bevy::reflect::{Reflect, TypePath};
-use serde::Deserialize;
+use serde::de::Visitor;
+use serde::{Deserialize, Deserializer};
 use thiserror::Error;
 
 use crate::dialogue::DialogueId;
+use crate::dialogue::parser::{DialogueContent, DialogueSegment, dialogue_parse};
 
-#[derive(Asset, Reflect, Deserialize)]
+#[derive(Asset, Reflect, Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct ClientAsset {
     pub name: String,
@@ -22,7 +24,7 @@ impl ClientAsset {
     }
 }
 
-#[derive(Reflect, Deserialize)]
+#[derive(Reflect, Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct ClientTaskAsset {
     pub id: String,
@@ -31,11 +33,33 @@ pub struct ClientTaskAsset {
     pub dialogues: Vec<ClientTaskDialogueAsset>,
 }
 
-#[derive(Reflect, Deserialize)]
+#[derive(Reflect, Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct ClientTaskDialogueAsset {
     pub id: Option<String>,
-    pub text: String,
+    #[serde(rename = "text", deserialize_with = "dialogue_de")]
+    pub content: DialogueContent,
+}
+
+fn dialogue_de<'de, D: Deserializer<'de>>(de: D) -> Result<DialogueContent, D::Error> {
+    struct DialogueVisitor;
+
+    impl Visitor<'_> for DialogueVisitor {
+        type Value = DialogueContent;
+
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("valid dialogue format")
+        }
+
+        fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            dialogue_parse(v).map_err(|err| serde::de::Error::custom(format!("{err:?}")))
+        }
+    }
+
+    de.deserialize_str(DialogueVisitor)
 }
 
 #[derive(Default, TypePath)]

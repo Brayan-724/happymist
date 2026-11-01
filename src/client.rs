@@ -82,6 +82,8 @@ fn load_client(
         let loaded_client = assets.get(asset);
 
         if let Some(loaded_client) = loaded_client {
+            println!("{loaded_client:#?}");
+
             commands.entity(entity).insert((
                 LoadedClient(asset.clone()),
                 ClientDetails {
@@ -172,9 +174,9 @@ fn on_client_approached(
         dialogue_id,
         Dialogue {
             name: client.name.clone(),
-            text_len: dialogue.text.len(),
-            text: dialogue.text.clone().into_chars(),
+            content: dialogue.content.clone(),
             font_size: 18.,
+            segment: None,
         },
         DialogueAnimated::default(),
     ));
@@ -205,9 +207,9 @@ fn on_next_dialogue(
             dialogue_id,
             Dialogue {
                 name: client.name.clone(),
-                text_len: dialogue.text.len(),
-                text: dialogue.text.clone().into_chars(),
+                content: dialogue.content.clone(),
                 font_size: 18.,
+                segment: None,
             },
             DialogueAnimated::default(),
         ));

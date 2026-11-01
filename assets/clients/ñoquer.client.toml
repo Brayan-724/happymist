@@ -6,13 +6,13 @@ id = "teeth"
 request = "teeth"
 
 [[task.dialogue]]
-text = "Batman me ponen nientes manana"
+text = "*Batman* /me/ |ponen| [nientes]#teeth ~manana~"
 
 [[task.dialogue]]
-text = "Batman ya tengo dientes"
+text = "*/~Batman |ya| ** tengo ** dientes~/*"
 
 [[task.dialogue]]
-text = "* Le estrujan el cuello *"
+text = "** Le estrujan // el // cuello **"
 
 [[task.dialogue]]
 text = "Hi this is a very long text to tesHi this is a very long text to tesHi this is a very long text to tesHi this is a very long"

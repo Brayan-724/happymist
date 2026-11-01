@@ -7,6 +7,11 @@ use bevy::ecs::world::DeferredWorld;
 use bevy::prelude::*;
 
 use crate::client::task::TaskId;
+use crate::fonts::Fonts;
+
+use self::parser::{DialogueContent, DialogueSegment};
+
+pub mod parser;
 
 pub fn plugin(app: &mut App) {
     app.add_systems(
@@ -32,9 +37,9 @@ pub struct NextDialogue(pub Entity);
 #[derive(Component)]
 pub struct Dialogue {
     pub name: String,
-    pub text: IntoChars,
-    pub text_len: usize,
+    pub content: DialogueContent,
     pub font_size: f32,
+    pub segment: Option<DialogueSegment>,
 }
 
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
@@ -121,6 +126,7 @@ const MAX_TIME: f32 = 5.0;
 fn update_dialogue_animation(
     mut commands: Commands,
     time: Res<Time>,
+    fonts: Res<Fonts>,
     query: Query<(
         Entity,
         &mut DialogueState,
@@ -130,24 +136,42 @@ fn update_dialogue_animation(
     )>,
 ) {
     for (dialogue_entity, mut state, mut dialogue, mut animation, text) in query {
-        let max_t = (dialogue.text_len as f32 * TIME_PER_CHAR).clamp(MIN_TIME, MAX_TIME);
-        let time_per_char = max_t / dialogue.text_len as f32;
+        let max_t = (dialogue.content.len as f32 * TIME_PER_CHAR).clamp(MIN_TIME, MAX_TIME);
+        let time_per_char = max_t / dialogue.content.len as f32;
 
         if animation.elapsed >= animation.next_char {
             let chars_to_advance = ((animation.elapsed.min(max_t) - animation.next_char)
                 / time_per_char)
                 .ceil() as usize;
 
-            for i in 0..(chars_to_advance + 1) {
+            let mut i = 0;
+            while i < (chars_to_advance + 1) {
+                dialogue.segment = dialogue
+                    .segment
+                    .take()
+                    .or_else(|| dialogue.content.segments.pop_front());
+
+                let Some(segment) = &mut dialogue.segment else {
+                    *state = DialogueState::Ended;
+                    commands
+                        .entity(dialogue_entity)
+                        .remove::<DialogueAnimated>();
+                    break;
+                };
+
                 // Only animate the last 5 chars
                 let is_last = i + 5 >= chars_to_advance;
 
-                if let Some(char) = dialogue.text.next() {
+                if let Some(char) = segment.chars.next() {
+                    i += 1;
                     animation.next_char += time_per_char;
 
                     commands.entity(text.0).with_child((
                         TextSpan::new(char),
                         TextFont {
+                            font: FontSource::Handle(
+                                fonts.get(segment.style.bold, segment.style.italic),
+                            ),
                             font_size: FontSize::Px(1.),
                             ..default()
                         },
@@ -155,12 +179,10 @@ fn update_dialogue_animation(
                             elapsed: if is_last { 0. } else { CHAR_TIME },
                             target_font: dialogue.font_size,
                         },
+                        UiTransform::default(),
                     ));
                 } else {
-                    *state = DialogueState::Ended;
-                    commands
-                        .entity(dialogue_entity)
-                        .remove::<DialogueAnimated>();
+                    _ = dialogue.segment.take();
                 }
             }
         }
@@ -169,7 +191,7 @@ fn update_dialogue_animation(
     }
 }
 
-const CHAR_TIME: f32 = 0.2;
+const CHAR_TIME: f32 = 1.;
 
 #[derive(Component)]
 struct DialogueCharAnimation {
@@ -180,9 +202,14 @@ struct DialogueCharAnimation {
 fn update_dialogue_char_animation(
     mut commands: Commands,
     time: Res<Time>,
-    query: Query<(Entity, &mut TextFont, &mut DialogueCharAnimation)>,
+    query: Query<(
+        Entity,
+        &mut TextFont,
+        &mut DialogueCharAnimation,
+        &mut UiTransform,
+    )>,
 ) {
-    for (entity, mut text_font, mut animation) in query {
+    for (entity, mut text_font, mut animation, mut trans) in query {
         animation.elapsed += time.delta_secs();
 
         let new_size = 0.0
@@ -193,6 +220,8 @@ fn update_dialogue_char_animation(
             .ceil();
 
         text_font.font_size = FontSize::Px(new_size);
+
+        trans.translation.x = percent(0.0.lerp(50., animation.elapsed / CHAR_TIME));
 
         if animation.elapsed > CHAR_TIME {
             commands.entity(entity).remove::<DialogueCharAnimation>();

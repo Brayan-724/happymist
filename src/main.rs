@@ -5,6 +5,7 @@ use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
 mod client;
 mod dialogue;
+mod fonts;
 mod game;
 mod main_menu;
 mod scene;
@@ -18,7 +19,13 @@ fn main() -> AppExit {
         .add_plugins(DefaultPlugins)
         .add_plugins(EguiPlugin::default())
         .add_plugins(WorldInspectorPlugin::new())
-        .add_plugins((ui::plugin, scene::plugin, dialogue::plugin, client::plugin))
+        .add_plugins((
+            ui::plugin,
+            scene::plugin,
+            dialogue::plugin,
+            client::plugin,
+            fonts::plugin,
+        ))
         .add_systems(Startup, setup)
         .run()
 }
