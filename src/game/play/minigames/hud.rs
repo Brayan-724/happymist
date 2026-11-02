@@ -1,7 +1,10 @@
 use bevy::prelude::*;
 
 use crate::{
-    game::{GameState, play::PlayPhase},
+    game::{
+        GameState,
+        play::PlayPhase,
+    },
     ui::{
         anim::{FallAway, Shake},
         time_bar::{TimeBar, TimeBarFinished, time_bar},
@@ -11,7 +14,6 @@ use crate::{
 const MAX_LIVES: u32 = 3;
 const TIME_LIMIT: f32 = 5.;
 
-/// Full-screen root of the minigame UI; this is what shakes.
 #[derive(Component)]
 struct MinigameRoot;
 
@@ -19,7 +21,7 @@ struct MinigameRoot;
 pub struct Lives(pub u32);
 
 #[derive(Component)]
-struct LifeIcon(u32); // 0 = leftmost
+struct LifeIcon(u32);
 
 pub fn plugin(app: &mut App) {
     app.add_systems(OnEnter(PlayPhase::Minigame), setup)
@@ -100,7 +102,6 @@ fn on_time_up(
     }
 }
 
-/// When a life is lost, drop the leftmost heart that's still standing.
 fn drop_lost_lives(
     mut commands: Commands,
     lives: Query<&Lives, Changed<Lives>>,
@@ -112,7 +113,7 @@ fn drop_lost_lives(
 
     let lost = MAX_LIVES - lives.0;
     if lost == 0 {
-        return; // also skips the first frame, when Lives is just added
+        return;
     }
 
     for (entity, icon) in &icons {
