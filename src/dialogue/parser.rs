@@ -122,7 +122,7 @@ pub fn dialogue_parse(input: &str) -> Result<DialogueContent, DialogueParseError
     macro_rules! save_segment {
         ($else:block) => {
             if !buf.is_empty() {
-                total_len += buf.len();
+                total_len += buf.chars().count();
                 segments.push_back(DialogueSegment::new(mem::take(&mut buf), style.clone()));
             } else {
                 $else

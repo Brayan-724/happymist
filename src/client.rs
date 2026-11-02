@@ -5,7 +5,7 @@ use bevy::{log, prelude::*};
 use crate::dialogue::{Dialogue, DialogueAnimated, DialogueId, NextDialogue};
 use crate::game::GameState;
 
-use self::loader::{ClientAsset, ClientAssetLoader};
+use self::loader::{ClientAsset, ClientAssetLoader, ClientTaskRequestAsset};
 use self::task::TaskId;
 
 mod loader;
@@ -16,7 +16,12 @@ pub fn plugin(app: &mut App) {
         .init_asset_loader::<ClientAssetLoader>()
         .add_systems(
             Update,
-            (load_client, setup_client, update_approaching)
+            (
+                load_client,
+                setup_client,
+                update_approaching,
+                update_client_jump_anim,
+            )
                 .chain()
                 .run_if(in_state(GameState::Dialogue)),
         )
@@ -29,11 +34,6 @@ pub enum Client {
     Ñoquer,
 }
 
-#[derive(Component, Clone, Debug)]
-pub struct ClientDetails {
-    pub name: String,
-}
-
 impl Client {
     pub fn get_client_file(self) -> &'static str {
         match self {
@@ -42,10 +42,24 @@ impl Client {
     }
 }
 
+#[derive(Component, Clone, Debug)]
+pub struct ClientDetails {
+    pub name: String,
+}
+
+#[derive(Component, Clone, Debug)]
+pub struct ClientTask(pub TaskId, pub ClientTaskRequestAsset);
+
+#[derive(Component, Clone, Debug)]
+pub struct ClientTasks(pub Vec<ClientTaskRequestAsset>);
+
+#[derive(Component, Clone, Copy, Debug)]
+pub struct ClientCurrentTask(pub usize);
+
 #[derive(Component)]
 pub struct LoadedClient(Handle<ClientAsset>);
 #[derive(Component)]
-pub struct LoadingClient(Handle<ClientAsset>);
+struct LoadingClient(Handle<ClientAsset>);
 
 const APPROACHING_TIME: f32 = 3.;
 const APPROACHING_MIN: Vec2 = vec2(150., 150.);
@@ -82,8 +96,6 @@ fn load_client(
         let loaded_client = assets.get(asset);
 
         if let Some(loaded_client) = loaded_client {
-            println!("{loaded_client:#?}");
-
             commands.entity(entity).insert((
                 LoadedClient(asset.clone()),
                 ClientDetails {
@@ -107,6 +119,7 @@ fn setup_client(
 
         commands.entity(entity).insert((
             ClientApproaching::default(),
+            ClientTasks(vec![]),
             Sprite {
                 image: assets.load(client.sprite.clone()),
                 custom_size: Some(vec2(50., 50.)),
@@ -175,6 +188,7 @@ fn on_client_approached(
         Dialogue {
             name: client.name.clone(),
             content: dialogue.content.clone(),
+            refs: dialogue.refs.clone(),
             font_size: 18.,
             segment: None,
         },
@@ -185,7 +199,7 @@ fn on_client_approached(
 fn on_next_dialogue(
     event: On<NextDialogue>,
     mut commands: Commands,
-    client: Single<(&ClientDetails, &LoadedClient)>,
+    client: Single<(Entity, &ClientDetails, &LoadedClient)>,
     query_dialogues: Query<&DialogueId>,
     assets: Res<Assets<ClientAsset>>,
 ) {
@@ -195,7 +209,7 @@ fn on_next_dialogue(
         return;
     };
 
-    let (client, client_asset) = *client;
+    let (client_entity, client, client_asset) = *client;
     let Some(client_asset) = assets.get(&client_asset.0) else {
         return;
     };
@@ -203,15 +217,47 @@ fn on_next_dialogue(
     let dialogue_id = DialogueId(dialogue_id.0, dialogue_id.1 + 1);
 
     if let Some(dialogue) = client_asset.get_dialogue(dialogue_id) {
+        commands.entity(client_entity).insert(ClientJumpAnim(0.));
         commands.spawn((
             dialogue_id,
             Dialogue {
                 name: client.name.clone(),
                 content: dialogue.content.clone(),
+                refs: dialogue.refs.clone(),
                 font_size: 18.,
                 segment: None,
             },
             DialogueAnimated::default(),
         ));
+    } else if let Some(task) = client_asset.tasks.get(dialogue_id.0.0) {
+        commands
+            .entity(client_entity)
+            .insert(ClientTask(dialogue_id.0, task.request.clone()));
+    }
+}
+
+const TALK_JUMP_TIME: f32 = 0.3;
+
+#[derive(Component)]
+struct ClientJumpAnim(f32);
+
+fn update_client_jump_anim(
+    mut commands: Commands,
+    time: Res<Time>,
+    query: Query<(Entity, &mut ClientJumpAnim, &mut Transform)>,
+) {
+    for (entity, mut anim, mut trans) in query {
+        let prev = ((anim.0 / TALK_JUMP_TIME) * f32::consts::PI).sin();
+        anim.0 += time.delta_secs();
+        anim.0 = anim.0.min(TALK_JUMP_TIME);
+        let current = ((anim.0 / TALK_JUMP_TIME) * f32::consts::PI).sin();
+
+        let delta = current - prev;
+
+        trans.translation.y += delta * 20.;
+
+        if anim.0 >= TALK_JUMP_TIME {
+            commands.entity(entity).remove::<ClientJumpAnim>();
+        }
     }
 }

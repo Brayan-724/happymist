@@ -1,13 +1,14 @@
 use std::path::PathBuf;
 
 use bevy::asset::{Asset, AssetLoader, AsyncReadExt};
+use bevy::platform::collections::HashMap;
 use bevy::reflect::{Reflect, TypePath};
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer};
 use thiserror::Error;
 
-use crate::dialogue::DialogueId;
-use crate::dialogue::parser::{DialogueContent, DialogueSegment, dialogue_parse};
+use crate::dialogue::parser::{DialogueContent, dialogue_parse};
+use crate::dialogue::{DialogueId, DialogueRef};
 
 #[derive(Asset, Reflect, Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
@@ -28,9 +29,19 @@ impl ClientAsset {
 #[serde(deny_unknown_fields)]
 pub struct ClientTaskAsset {
     pub id: String,
-    pub request: String,
+    pub request: ClientTaskRequestAsset,
     #[serde(rename = "dialogue")]
     pub dialogues: Vec<ClientTaskDialogueAsset>,
+}
+
+#[derive(Reflect, Clone, Deserialize, Debug)]
+#[serde(deny_unknown_fields, untagged)]
+pub enum ClientTaskRequestAsset {
+    Item {
+        item: String,
+        #[serde(default)]
+        reveal: bool,
+    },
 }
 
 #[derive(Reflect, Deserialize, Debug)]
@@ -39,6 +50,8 @@ pub struct ClientTaskDialogueAsset {
     pub id: Option<String>,
     #[serde(rename = "text", deserialize_with = "dialogue_de")]
     pub content: DialogueContent,
+    #[serde(rename = "ref", default)]
+    pub refs: HashMap<String, DialogueRef>,
 }
 
 fn dialogue_de<'de, D: Deserializer<'de>>(de: D) -> Result<DialogueContent, D::Error> {

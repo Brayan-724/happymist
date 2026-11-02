@@ -3,7 +3,10 @@ use core::{f32, fmt};
 use bevy::color::palettes::tailwind;
 use bevy::ecs::lifecycle::HookContext;
 use bevy::ecs::world::DeferredWorld;
+use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
+use bevy::window::{CursorIcon, SystemCursorIcon};
+use serde::Deserialize;
 
 use crate::client::task::TaskId;
 use crate::fonts::Fonts;
@@ -26,6 +29,12 @@ pub fn plugin(app: &mut App) {
     .add_observer(handle_click.run_if(is_dialogue_active));
 }
 
+#[derive(Reflect, Clone, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DialogueRef {
+    Explain(String),
+}
+
 #[derive(Component, Reflect, Clone, Copy, Debug, Default)]
 pub struct DialogueId(pub TaskId, pub usize);
 
@@ -42,6 +51,7 @@ pub struct NextDialogue(pub Entity);
 pub struct Dialogue {
     pub name: String,
     pub content: DialogueContent,
+    pub refs: HashMap<String, DialogueRef>,
     pub font_size: f32,
     pub segment: Option<DialogueSegment>,
 }
@@ -51,6 +61,9 @@ pub enum DialogueState {
     Presenting,
     Ended,
 }
+
+#[derive(Component)]
+struct DialogueUi(Entity);
 
 #[derive(Component)]
 struct DialogueText(Entity);
@@ -97,6 +110,7 @@ fn setup_dialogue(event: On<Add<Dialogue>>, mut commands: Commands, query: Query
 
     commands
         .spawn((
+            DialogueUi(event.entity),
             LifetimeShared(event.entity),
             Node {
                 position_type: PositionType::Absolute,
@@ -131,7 +145,7 @@ fn setup_dialogue(event: On<Add<Dialogue>>, mut commands: Commands, query: Query
     ));
 }
 
-const TIME_PER_CHAR: f32 = 0.08;
+const TIME_PER_CHAR: f32 = 0.06;
 const MIN_TIME: f32 = 0.5;
 const MAX_TIME: f32 = 5.0;
 
@@ -197,6 +211,8 @@ fn update_dialogue_animation(
                         },
                     );
 
+                    let current_text: Entity;
+
                     if segment.style.dancing {
                         let is_empty = texts
                             .get_mut(text.0)
@@ -210,6 +226,8 @@ fn update_dialogue_animation(
                             commands.entity(container.0).add_child(text.0);
                         }
 
+                        current_text = text.0;
+
                         commands
                             .entity(text.0)
                             .insert(DialogueDancingAnim(animation.chars_advanced));
@@ -217,9 +235,29 @@ fn update_dialogue_animation(
                         text.0 = commands.spawn(Text::default()).id();
                         commands.entity(container.0).add_child(text.0);
                     } else {
-                        commands
-                            .entity(text.0)
-                            .with_child((TextSpan::new(char), base));
+                        current_text = commands.spawn((TextSpan::new(char), base)).id();
+
+                        commands.entity(text.0).add_child(current_text);
+                    }
+
+                    if let Some(label) = segment.style.reference.clone() {
+                        let Some(content) = dialogue.refs.get(&label) else {
+                            continue;
+                        };
+
+                        let mut e = commands.entity(current_text);
+
+                        match content {
+                            DialogueRef::Explain(content) => {
+                                e.insert(DialogueReference(content.clone()))
+                            }
+                        };
+
+                        e.insert(Underline)
+                            .observe(on_over_reference)
+                            .observe(on_move_reference)
+                            .observe(on_out_reference)
+                            .observe(on_remove_reference);
                     }
                 } else {
                     _ = dialogue.segment.take();
@@ -231,7 +269,7 @@ fn update_dialogue_animation(
     }
 }
 
-const CHAR_TIME: f32 = 0.4;
+const CHAR_TIME: f32 = 0.2;
 
 #[derive(Component)]
 struct DialogueCharAnimation {
@@ -268,10 +306,7 @@ const DANCING_DIFF: f32 = 0.6;
 #[derive(Component)]
 struct DialogueDancingAnim(usize);
 
-fn update_dancing_anim(
-    time: Res<Time>,
-    query: Query<(&mut UiTransform, &DialogueDancingAnim)>,
-) {
+fn update_dancing_anim(time: Res<Time>, query: Query<(&mut UiTransform, &DialogueDancingAnim)>) {
     for (mut trans, animation) in query {
         let offset_t = animation.0 as f32 * DANCING_DIFF;
 
@@ -283,28 +318,128 @@ fn update_dancing_anim(
     }
 }
 
+#[derive(Component)]
+struct DialogueReference(String);
+
+#[derive(Component)]
+struct DialogueReferenceUi(Entity);
+
+fn on_over_reference(
+    event: On<PointerOver>,
+    mut commands: Commands,
+    mut cursor: Single<(Entity, Option<&mut CursorIcon>), With<Window>>,
+    query: Query<&DialogueReference>,
+) {
+    let Ok(reference) = query.get(event.entity) else {
+        return;
+    };
+
+    if let Some(cursor) = &mut cursor.1 {
+        **cursor = CursorIcon::System(SystemCursorIcon::Help);
+    } else {
+        commands
+            .entity(cursor.0)
+            .insert(CursorIcon::System(SystemCursorIcon::Help));
+    }
+
+    let hit = event.pointer.position;
+
+    let ui = commands
+        .spawn((
+            LifetimeShared(event.entity),
+            Node {
+                position_type: PositionType::Absolute,
+                top: px(hit.y - 10.),
+                left: px(hit.x),
+                padding: UiRect::all(px(5)),
+                border_radius: BorderRadius::all(px(5)),
+                ..default()
+            },
+            UiTransform::from_xy(percent(-50), percent(-100)),
+            BackgroundColor(tailwind::GRAY_900.into()),
+            Text(reference.0.clone()),
+            TextFont {
+                font_size: FontSize::Rem(0.8),
+                ..default()
+            },
+        ))
+        .id();
+
+    commands
+        .entity(event.entity)
+        .insert(DialogueReferenceUi(ui));
+}
+
+fn on_move_reference(
+    event: On<PointerMove>,
+    query: Query<&DialogueReferenceUi>,
+    mut nodes: Query<&mut Node>,
+) {
+    let Ok(reference) = query.get(event.entity) else {
+        return;
+    };
+
+    let Ok(mut node) = nodes.get_mut(reference.0) else {
+        return;
+    };
+
+    let hit = event.pointer.position;
+
+    node.top = px(hit.y - 10.);
+    node.left = px(hit.x);
+}
+
+fn on_out_reference(
+    event: On<PointerOut>,
+    mut cursor: Single<&mut CursorIcon, With<Window>>,
+    mut commands: Commands,
+    query: Query<&DialogueReferenceUi>,
+) {
+    let Ok(ui) = query.get(event.entity) else {
+        return;
+    };
+
+    **cursor = CursorIcon::System(SystemCursorIcon::Default);
+
+    commands.entity(ui.0).despawn();
+}
+
+fn on_remove_reference(
+    _: On<Despawn<DialogueReferenceUi>>,
+    mut cursor: Single<&mut CursorIcon, With<Window>>,
+) {
+    **cursor = CursorIcon::System(SystemCursorIcon::Default);
+}
+
 fn is_dialogue_active(query: Query<(), With<Dialogue>>) -> bool {
     !query.is_empty()
 }
 
 fn handle_click(
-    mut event: On<PointerPress>,
+    mut event: On<PointerClick>,
     mut commands: Commands,
-    query: Query<(Entity, &mut DialogueState, Option<&mut DialogueAnimated>)>,
+    mut ui: Query<&DialogueUi>,
+    mut query: Query<(Entity, &mut DialogueState, Option<&mut DialogueAnimated>)>,
 ) {
+    let Ok(ui) = ui.get_mut(event.entity) else {
+        return;
+    };
+
     event.propagate(false);
 
-    for (entity, mut state, animation) in query {
-        match *state {
-            DialogueState::Presenting => {
-                *state = DialogueState::Ended;
-                if let Some(mut animation) = animation {
-                    animation.elapsed = f32::MAX;
-                }
+    let Ok((entity, mut state, animation)) = query.get_mut(ui.0) else {
+        return;
+    };
+
+    match *state {
+        DialogueState::Presenting => {
+            *state = DialogueState::Ended;
+            if let Some(mut animation) = animation {
+                animation.elapsed = f32::MAX;
             }
-            DialogueState::Ended => {
-                commands.trigger(NextDialogue(entity));
-            }
+        }
+        DialogueState::Ended => {
+            commands.trigger(NextDialogue(entity));
         }
     }
 }

@@ -3,16 +3,21 @@ sprite = "ñoquer.jpg"
 
 [[task]]
 id = "teeth"
-request = "teeth"
+
+[task.request]
+item = "teeth"
+reveal = true
 
 [[task.dialogue]]
-text = "*Batman* /me/ |ponen| [nientes]#teeth ~manana~"
+text = "*Batman* /me/ |ponen| [nientes]#teeth ~mañana~"
+ref.teeth.explain = "El ñoquer había perdido sus dientes"
 
 [[task.dialogue]]
-text = "*/~Batman |ya| *tengo* dientes~/*"
+text = "*/~Batman |ya| *tengo* nientes~/*"
 
 [[task.dialogue]]
 text = "/\\* Le estrujan el cuello \\*/"
 
 [[task.dialogue]]
-text = "Hi this is a very long text to tesHi this is a very long text to tesHi this is a very long text to tesHi this is a very long"
+text = "Devuelveme mi [niente]#teeth"
+ref.teeth.explain = "PORQUE SE LO ARRANCASTE????"
