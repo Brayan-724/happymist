@@ -1,4 +1,3 @@
-
 @group(1) @binding(0) var<uniform> cut: vec4<f32>;
 @group(1) @binding(1) var image: texture_2d<f32>;
 @group(1) @binding(2) var image_sampler: sampler;

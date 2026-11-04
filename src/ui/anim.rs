@@ -8,21 +8,71 @@ pub struct SlideOut {
 
 impl SlideOut {
     pub fn random(seconds: f32) -> Self {
-        let direction = match rand::random_range(0..4) {
-            0 => Vec2::X,
-            1 => Vec2::NEG_X,
-            2 => Vec2::Y,
-            _ => Vec2::NEG_Y,
-        };
         Self {
-            direction,
+            direction: random_direction(),
             timer: Timer::from_seconds(seconds, TimerMode::Once),
         }
     }
 }
 
+fn random_direction() -> Vec2 {
+    match rand::random_range(0..4) {
+        0 => Vec2::X,
+        1 => Vec2::NEG_X,
+        2 => Vec2::Y,
+        _ => Vec2::NEG_Y,
+    }
+}
+
 pub fn plugin(app: &mut App) {
-    app.add_systems(Update, (slide_out, shake, fall_away, launched));
+    app.add_systems(Update, (slide_in, slide_out, shake, fall_away, launched));
+}
+
+#[derive(Component)]
+pub struct SlideIn {
+    direction: Vec2,
+    timer: Timer,
+}
+
+#[derive(EntityEvent)]
+pub struct SlideInFinished(pub Entity);
+
+// starts off screen so it doesn't flash in place on the first frame
+pub fn slide_in_random(seconds: f32) -> impl Bundle {
+    let direction = random_direction();
+    (
+        SlideIn {
+            direction,
+            timer: Timer::from_seconds(seconds, TimerMode::Once),
+        },
+        UiTransform {
+            translation: Val2::new(percent(direction.x * 100.), percent(direction.y * 100.)),
+            ..default()
+        },
+    )
+}
+
+fn slide_in(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut query: Query<(Entity, &mut SlideIn, &mut UiTransform)>,
+) {
+    for (entity, mut slide, mut transform) in &mut query {
+        slide.timer.tick(time.delta());
+
+        let t = (1. - EaseFunction::CubicOut.sample_clamped(slide.timer.fraction())) * 100.;
+        transform.translation = Val2::new(
+            percent(slide.direction.x * t),
+            percent(slide.direction.y * t),
+        );
+
+        if slide.timer.just_finished() {
+            commands
+                .entity(entity)
+                .remove::<SlideIn>()
+                .trigger(SlideInFinished);
+        }
+    }
 }
 
 fn slide_out(
@@ -89,26 +139,46 @@ const FALL_SPIN: f32 = 60.;
 #[derive(Component, Default)]
 pub struct FallAway {
     elapsed: f32,
+    start_rotation: Option<Rot2>,
+}
+
+impl FallAway {
+    pub fn opacity(&self) -> f32 {
+        (1. - self.elapsed / FALL_TIME).max(0.)
+    }
 }
 
 fn fall_away(
     mut commands: Commands,
     time: Res<Time>,
-    mut query: Query<(
-        Entity,
-        &mut FallAway,
-        &mut UiTransform,
-        &mut ImageNode,
-        &mut Visibility,
-    )>,
+    mut query: Query<(Entity, &mut FallAway, &mut UiTransform, &mut Visibility)>,
+    children: Query<&Children>,
+    mut images: Query<&mut ImageNode>,
+    mut backgrounds: Query<&mut BackgroundColor>,
+    mut texts: Query<&mut TextColor>,
 ) {
-    for (entity, mut fall, mut transform, mut image, mut visibility) in &mut query {
+    for (entity, mut fall, mut transform, mut visibility) in &mut query {
         fall.elapsed += time.delta_secs();
         let t = fall.elapsed;
+        let start_rotation = *fall.start_rotation.get_or_insert(transform.rotation);
+        let opacity = fall.opacity();
 
         transform.translation = Val2::new(px(t * FALL_DRIFT), px(0.5 * FALL_GRAVITY * t * t));
-        transform.rotation = Rot2::degrees(t * FALL_SPIN);
-        image.color = Color::WHITE.with_alpha(1. - t / FALL_TIME);
+        transform.rotation = start_rotation * Rot2::degrees(t * FALL_SPIN);
+
+        for target in std::iter::once(entity).chain(children.iter_descendants(entity)) {
+            if let Ok(mut image) = images.get_mut(target) {
+                image.color.set_alpha(opacity);
+            }
+            if let Ok(mut background) = backgrounds.get_mut(target)
+                && background.0.alpha() > 0.
+            {
+                background.0.set_alpha(opacity);
+            }
+            if let Ok(mut text) = texts.get_mut(target) {
+                text.0.set_alpha(opacity);
+            }
+        }
 
         if t >= FALL_TIME {
             *visibility = Visibility::Hidden;

@@ -4,11 +4,9 @@ use bevy::{
 };
 
 use crate::{
-    game::{
-        GameState,
-        play::{PlayPhase, minigames::level::LevelProgress},
-    },
-    ui::anim::SlideOut,
+    client::DialogueFinished,
+    game::{GameState, level::LevelProgress, play::PlayPhase},
+    ui::anim::{SlideInFinished, SlideOut, slide_in_random},
 };
 
 const TILE_STRETCH: f32 = 20.;
@@ -28,34 +26,93 @@ struct Oscillate {
 #[derive(Component)]
 struct ScaleIn(Timer);
 
-const TITLE_HOLD: f32 = 2.; // seconds the title stays before the countdown
+const TITLE_HOLD: f32 = 2.;
 const COUNTDOWN_FROM: u32 = 3;
 const COUNTDOWN_STEP: f32 = 0.6;
+const COVER_TIME: f32 = 0.6;
 
 #[derive(Component, Default)]
 struct TitleSequence {
     elapsed: f32,
-    shown: u32, // number currently on screen (0 = still the title)
+    shown: u32,
 }
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(OnEnter(PlayPhase::Title), setup)
+    app.add_systems(PreStartup, load_background)
+        .add_systems(OnEnter(PlayPhase::Title), setup)
         .add_systems(
             Update,
             (update, oscillate, title_sequence).run_if(in_state(PlayPhase::Title)),
         )
-        .add_systems(Update, scroll_background);
+        .add_systems(Update, scroll_background)
+        .add_observer(on_dialogue_finished);
 }
 
 #[derive(Component)]
 struct TitleRoot;
 
-fn setup(mut commands: Commands, assets: Res<AssetServer>, progress: Res<LevelProgress>) {
+#[derive(Resource)]
+struct TitleBackground(Handle<Image>);
+
+fn load_background(mut commands: Commands, assets: Res<AssetServer>) {
     let image = assets
         .load_builder()
         .with_settings(|s: &mut ImageLoaderSettings| s.sampler = ImageSampler::nearest())
         .load("sprites/background/title-bg.png");
 
+    commands.insert_resource(TitleBackground(image));
+}
+
+fn scrolling_background(image: Handle<Image>) -> impl Bundle {
+    (
+        ScrollingBackground,
+        Node {
+            position_type: PositionType::Absolute,
+            left: px(0),
+            top: px(0),
+            right: px(-TILE_SIZE),
+            bottom: px(-TILE_SIZE),
+            ..default()
+        },
+        ImageNode {
+            image,
+            image_mode: NodeImageMode::Tiled {
+                tile_x: true,
+                tile_y: true,
+                stretch_value: TILE_STRETCH,
+            },
+            ..default()
+        },
+        ZIndex(-1),
+    )
+}
+
+fn on_dialogue_finished(
+    _: On<DialogueFinished>,
+    mut commands: Commands,
+    background: Res<TitleBackground>,
+) {
+    commands
+        .spawn((
+            Name::new("TitleCover"),
+            GlobalZIndex(1),
+            DespawnOnExit(GameState::Dialogue),
+            slide_in_random(COVER_TIME),
+            Node {
+                width: percent(100),
+                height: percent(100),
+                ..default()
+            },
+            children![scrolling_background(background.0.clone())],
+        ))
+        .observe(on_cover_finished);
+}
+
+fn on_cover_finished(_: On<SlideInFinished>, mut next: ResMut<NextState<GameState>>) {
+    next.set(GameState::Game);
+}
+
+fn setup(mut commands: Commands, background: Res<TitleBackground>, progress: Res<LevelProgress>) {
     let title = progress
         .current_minigame()
         .map_or("", |minigame| minigame.info().title);
@@ -72,27 +129,7 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>, progress: Res<LevelPr
             ..default()
         },
         children![
-            (
-                ScrollingBackground,
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: px(0),
-                    top: px(0),
-                    right: px(-TILE_SIZE),
-                    bottom: px(-TILE_SIZE),
-                    ..default()
-                },
-                ImageNode {
-                    image,
-                    image_mode: NodeImageMode::Tiled {
-                        tile_x: true,
-                        tile_y: true,
-                        stretch_value: TILE_STRETCH,
-                    },
-                    ..default()
-                },
-                ZIndex(-1),
-            ),
+            scrolling_background(background.0.clone()),
             (
                 Text::new(title),
                 TitleSequence::default(),

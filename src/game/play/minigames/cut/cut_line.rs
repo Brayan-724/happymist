@@ -2,15 +2,20 @@ use bevy::{
     prelude::*, reflect::TypePath, render::render_resource::AsBindGroup, shader::ShaderRef,
 };
 
-use crate::{game::play::minigames::ActiveMinigame, ui::anim::Launched};
+use crate::{
+    game::play::minigames::{
+        ActiveMinigame,
+        hud::{FallsOnLose, LoseDelay},
+    },
+    ui::anim::{FallAway, Launched},
+};
 
 const LINE_WIDTH: f32 = 20.;
 const LINE_START: f32 = 50. - LINE_WIDTH / 2.;
-const LINE_ANGLE: std::ops::Range<f32> = 60.0..120.0; // 90 = straight across the sugarcane
-const KNOB_SIZE: f32 = 3.9; // % of the window width
+const LINE_ANGLE: std::ops::Range<f32> = 60.0..120.0;
+const KNOB_SIZE: f32 = 3.9;
 const KNOB_SMOOTHING: f32 = 40.;
 const CUT_DONE_AT: f32 = 0.8;
-pub const CUTS_TO_WIN: u32 = 3;
 const FINISH_COLOR: Color = Color::srgb(0.2, 0.8, 0.3);
 const LINE_SPRITE_SIZE: Vec2 = Vec2::new(585., 20.);
 const STAR_COUNT: u32 = 14;
@@ -35,7 +40,7 @@ struct DashedLine;
 #[derive(Asset, TypePath, AsBindGroup, Clone)]
 struct CutLineMaterial {
     #[uniform(0)]
-    line: Vec2,
+    line: Vec3,
     #[uniform(1)]
     finish_color: LinearRgba,
     #[texture(2)]
@@ -59,7 +64,11 @@ pub struct CutKnob {
 pub fn plugin(app: &mut App) {
     app.add_plugins(UiMaterialPlugin::<CutLineMaterial>::default())
         .add_systems(OnEnter(ActiveMinigame::Cut), setup)
-        .add_systems(Update, update.run_if(in_state(ActiveMinigame::Cut)));
+        .add_systems(
+            Update,
+            (update.run_if(not(resource_exists::<LoseDelay>)), fade_line)
+                .run_if(in_state(ActiveMinigame::Cut)),
+        );
 }
 
 fn setup(
@@ -78,7 +87,7 @@ fn spawn_cut_line(
 ) {
     let star = assets.load("sprites/ui/Star.png");
     let line_material = materials.add(CutLineMaterial {
-        line: Vec2::new(0., CUT_DONE_AT),
+        line: Vec3::new(0., CUT_DONE_AT, 1.),
         finish_color: FINISH_COLOR.to_linear(),
         image: assets.load("sprites/ui/DashedLine.png"),
     });
@@ -87,11 +96,10 @@ fn spawn_cut_line(
     commands
         .spawn((
             CutLineRoot { star },
+            FallsOnLose,
             DespawnOnExit(ActiveMinigame::Cut),
             ZIndex(1),
-            UiTransform::from_rotation(Rot2::degrees(
-                rand::random_range(LINE_ANGLE) + from_bottom,
-            )),
+            UiTransform::from_rotation(Rot2::degrees(rand::random_range(LINE_ANGLE) + from_bottom)),
             Node {
                 width: percent(100),
                 height: percent(100),
@@ -155,7 +163,6 @@ fn on_knob_drag(
         return;
     };
 
-    // only the part of the mouse movement that goes along the line counts
     let (transform, computed) = *root;
     let direction = transform.rotation * Vec2::X;
     let along_line = event.distance.dot(direction);
@@ -184,16 +191,14 @@ fn update(
     mut count: ResMut<CutCount>,
     knob: Single<(&mut CutKnob, &mut Node, &UiGlobalTransform, &ComputedNode)>,
     root: Single<(Entity, &CutLineRoot, &UiTransform)>,
-    line: Single<
-        (&mut Node, &MaterialNode<CutLineMaterial>),
-        (With<DashedLine>, Without<CutKnob>),
-    >,
+    line: Single<(&mut Node, &MaterialNode<CutLineMaterial>), (With<DashedLine>, Without<CutKnob>)>,
 ) {
     let (mut knob, mut node, global, computed) = knob.into_inner();
     let (root_entity, root, root_transform) = *root;
 
     let target = knob.progress;
-    knob.shown.smooth_nudge(&target, KNOB_SMOOTHING, time.delta_secs());
+    knob.shown
+        .smooth_nudge(&target, KNOB_SMOOTHING, time.delta_secs());
     if target - knob.shown < 0.01 {
         knob.shown = target;
     }
@@ -220,9 +225,19 @@ fn update(
         }
 
         commands.entity(root_entity).despawn();
-        if count.0 < CUTS_TO_WIN {
+        if count.0 < ActiveMinigame::Cut.info().goal {
             spawn_cut_line(&mut commands, &assets, &mut materials);
         }
+    }
+}
+
+fn fade_line(
+    mut materials: ResMut<Assets<CutLineMaterial>>,
+    root: Single<&FallAway, With<CutLineRoot>>,
+    line: Single<&MaterialNode<CutLineMaterial>, With<DashedLine>>,
+) {
+    if let Some(mut material) = materials.get_mut(&line.0) {
+        material.line.z = root.opacity();
     }
 }
 

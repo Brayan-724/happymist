@@ -4,7 +4,7 @@ use crate::game::play::PlayPhase;
 
 pub mod cut;
 pub mod hud;
-pub mod level;
+pub mod pot;
 
 #[derive(SubStates, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[source(PlayPhase = PlayPhase::Minigame)]
@@ -37,8 +37,8 @@ impl ActiveMinigame {
             },
             Self::Pot => MinigameInfo {
                 title: "Into the pot!!!",
-                goal: 1,
-                time_limit: 5.,
+                goal: 4,
+                time_limit: 8.,
             },
             ActiveMinigame::InFire => MinigameInfo {
                 title: "Put it in the fire!!!",
@@ -49,10 +49,7 @@ impl ActiveMinigame {
     }
 }
 
-// Here we should define the "game scene" having each level a list of something like:
-// Level = [cut, mix, shake]
-
 pub fn plugin(app: &mut App) {
     app.add_sub_state::<ActiveMinigame>()
-        .add_plugins((hud::plugin, level::plugin, cut::plugin));
+        .add_plugins((hud::plugin, cut::plugin, pot::plugin));
 }

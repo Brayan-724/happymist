@@ -33,7 +33,7 @@ fn setup(mut commands: Commands) {
                     BackgroundColor(Color::srgb(0.2, 0.2, 0.2)),
                     children![Text::new("Play")],
                 ))
-                .observe(on_play_click); // <- the onclick
+                .observe(on_play_click);
         });
 }
 

@@ -7,8 +7,8 @@ use crate::{game, main_menu};
 
 #[derive(States, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Scene {
-    MainMenu,
     #[default]
+    MainMenu,
     Game,
 }
 

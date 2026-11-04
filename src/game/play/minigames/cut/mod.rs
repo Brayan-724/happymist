@@ -3,11 +3,11 @@ use bevy::{
     prelude::*, reflect::TypePath, render::render_resource::AsBindGroup, shader::ShaderRef,
 };
 
-use cut_line::{CUTS_TO_WIN, CutCount, CutFinished};
+use cut_line::{CutCount, CutFinished};
 
-use crate::game::play::minigames::level::MinigameFinished;
+use crate::game::level::MinigameFinished;
 
-use super::ActiveMinigame;
+use super::{ActiveMinigame, hud::FallsOnLose};
 
 pub mod cut_line;
 
@@ -80,6 +80,7 @@ fn setup(
             root.spawn((
                 Name::new("Sugarcane"),
                 Sugarcane,
+                FallsOnLose,
                 ImageNode::new(image.clone()),
                 Node {
                     width: percent(40),
@@ -102,6 +103,7 @@ fn setup(
 
             root.spawn((
                 Name::new("CutCounter"),
+                FallsOnLose,
                 BackgroundColor(tailwind::GRAY_800.into()),
                 Node {
                     position_type: PositionType::Absolute,
@@ -138,7 +140,7 @@ fn on_cut_finished(
     let normal = event.rotation * Vec2::Y;
 
     count_text.0 = count.0.to_string();
-    if count.0 >= CUTS_TO_WIN {
+    if count.0 >= ActiveMinigame::Cut.info().goal {
         commands.entity(entity).insert(Visibility::Hidden);
         commands.trigger(MinigameFinished);
     }

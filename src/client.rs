@@ -3,7 +3,7 @@ use core::f32;
 use bevy::{log, prelude::*};
 
 use crate::dialogue::{Dialogue, DialogueAnimated, DialogueId, NextDialogue};
-use crate::game::GameState;
+use crate::game::{GameState, level::LevelProgress};
 
 use self::loader::{ClientAsset, ClientAssetLoader, ClientTaskRequestAsset};
 use self::task::TaskId;
@@ -73,6 +73,9 @@ pub struct ClientApproaching {
 
 #[derive(EntityEvent)]
 pub struct ClientApproached(Entity);
+
+#[derive(Event)]
+pub struct DialogueFinished;
 
 #[derive(Component, Reflect)]
 pub struct ClientTasking(pub TaskId);
@@ -162,6 +165,7 @@ fn on_client_approached(
     mut commands: Commands,
     query: Query<(&ClientDetails, &LoadedClient)>,
     assets: Res<Assets<ClientAsset>>,
+    progress: Res<LevelProgress>,
 ) {
     let Ok((client, client_asset)) = query.get(event.0) else {
         return;
@@ -171,7 +175,11 @@ fn on_client_approached(
         return;
     };
 
-    let task_id = TaskId(0);
+    let Some(level) = progress.current_level() else {
+        return;
+    };
+
+    let task_id = level.task;
     let dialogue_id = DialogueId(task_id, 0);
 
     let Some(dialogue) = client_asset.get_dialogue(dialogue_id) else {
@@ -233,6 +241,7 @@ fn on_next_dialogue(
         commands
             .entity(client_entity)
             .insert(ClientTask(dialogue_id.0, task.request.clone()));
+        commands.trigger(DialogueFinished);
     }
 }
 
