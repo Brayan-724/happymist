@@ -1,10 +1,7 @@
 use bevy::prelude::*;
 
 use crate::{
-    game::{
-        GameState,
-        play::PlayPhase,
-    },
+    game::{GameState, play::PlayPhase},
     ui::{
         anim::{FallAway, Shake},
         time_bar::{TimeBar, TimeBarFinished, time_bar},
@@ -20,6 +17,11 @@ struct MinigameRoot;
 #[derive(Component)]
 pub struct Lives(pub u32);
 
+impl Default for Lives {
+    fn default() -> Self {
+        Self(MAX_LIVES)
+    }
+}
 #[derive(Component)]
 struct LifeIcon(u32);
 
@@ -81,6 +83,7 @@ fn on_time_up(
     mut bars: Query<&mut TimeBar>,
     mut lives: Query<&mut Lives>,
     root: Query<Entity, With<MinigameRoot>>,
+    mut next: ResMut<NextState<PlayPhase>>,
 ) {
     let Ok(mut lives) = lives.single_mut() else {
         return;
@@ -92,7 +95,7 @@ fn on_time_up(
     }
 
     if lives.0 == 0 {
-        info!("game over");
+        next.set(PlayPhase::GameOver);
         return;
     }
 

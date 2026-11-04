@@ -4,7 +4,10 @@ use bevy::{
 };
 
 use crate::{
-    game::{GameState, play::PlayPhase},
+    game::{
+        GameState,
+        play::{PlayPhase, minigames::level::LevelProgress},
+    },
     ui::anim::SlideOut,
 };
 
@@ -47,11 +50,15 @@ pub fn plugin(app: &mut App) {
 #[derive(Component)]
 struct TitleRoot;
 
-fn setup(mut commands: Commands, assets: Res<AssetServer>) {
+fn setup(mut commands: Commands, assets: Res<AssetServer>, progress: Res<LevelProgress>) {
     let image = assets
         .load_builder()
         .with_settings(|s: &mut ImageLoaderSettings| s.sampler = ImageSampler::nearest())
         .load("sprites/background/title-bg.png");
+
+    let title = progress
+        .current_minigame()
+        .map_or("", |minigame| minigame.info().title);
 
     commands.spawn((
         TitleRoot,
@@ -87,7 +94,7 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>) {
                 ZIndex(-1),
             ),
             (
-                Text::new("Cut the sugarcane!!!"),
+                Text::new(title),
                 TitleSequence::default(),
                 TextFont {
                     font_size: FontSize::Px(80.),

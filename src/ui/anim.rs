@@ -22,7 +22,7 @@ impl SlideOut {
 }
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(Update, (slide_out, shake, fall_away));
+    app.add_systems(Update, (slide_out, shake, fall_away, launched));
 }
 
 fn slide_out(
@@ -113,6 +113,49 @@ fn fall_away(
         if t >= FALL_TIME {
             *visibility = Visibility::Hidden;
             commands.entity(entity).remove::<FallAway>();
+        }
+    }
+}
+
+const LAUNCH_TIME: f32 = 0.9;
+const LAUNCH_GRAVITY: f32 = 1200.;
+
+#[derive(Component)]
+pub struct Launched {
+    velocity: Vec2,
+    spin: f32,
+    elapsed: f32,
+}
+
+impl Launched {
+    pub fn random() -> Self {
+        let direction = Rot2::degrees(rand::random_range(0.0..360.)) * Vec2::X;
+        Self {
+            velocity: direction * rand::random_range(250.0..650.),
+            spin: rand::random_range(-360.0..360.),
+            elapsed: 0.,
+        }
+    }
+}
+
+fn launched(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut query: Query<(Entity, &mut Launched, &mut UiTransform, &mut ImageNode)>,
+) {
+    for (entity, mut launch, mut transform, mut image) in &mut query {
+        launch.elapsed += time.delta_secs();
+        let t = launch.elapsed;
+
+        transform.translation = Val2::new(
+            px(launch.velocity.x * t),
+            px(launch.velocity.y * t + 0.5 * LAUNCH_GRAVITY * t * t),
+        );
+        transform.rotation = Rot2::degrees(t * launch.spin);
+        image.color = Color::WHITE.with_alpha(1. - t / LAUNCH_TIME);
+
+        if t >= LAUNCH_TIME {
+            commands.entity(entity).despawn();
         }
     }
 }
