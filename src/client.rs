@@ -233,7 +233,6 @@ fn on_next_dialogue(
         commands
             .entity(*player)
             .insert(PlayerCurrentTask(task.request.clone()));
-        commands.trigger(DialogueFinished);
     }
 }
 

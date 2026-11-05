@@ -4,6 +4,7 @@ use bevy::prelude::*;
 use bevy::ui::RelativeCursorPosition;
 use bevy::window::{CursorIcon, SystemCursorIcon};
 
+use crate::client::DialogueFinished;
 use crate::client::loader::ClientTaskRequestAsset;
 use crate::ext::FloatExt as _;
 
@@ -23,13 +24,7 @@ pub struct Player;
 pub struct PlayerCurrentTask(pub ClientTaskRequestAsset);
 
 fn setup(mut commands: Commands) {
-    commands.spawn((
-        Player,
-        // PlayerCurrentTask(ClientTaskRequestAsset::Item {
-        //     item: "teeth".into(),
-        //     reveal: true,
-        // }),
-    ));
+    commands.spawn(Player);
 }
 
 fn on_assigned_task(
@@ -50,7 +45,6 @@ fn on_assigned_task(
                         height: px(250 * 2),
                         ..default()
                     },
-                    // UiTransform::from_xy(percent(-50), percent(-50)),
                     PostitEntering(0.),
                     PostitPhysics {
                         enabled: true,
@@ -62,6 +56,7 @@ fn on_assigned_task(
                 .with_child((
                     Postit,
                     RelativeCursorPosition::default(),
+                    Pickable::IGNORE,
                     Node {
                         position_type: PositionType::Absolute,
                         bottom: px(0),
@@ -79,6 +74,7 @@ fn on_assigned_task(
                         .with_visual_box(VisualBox::BorderBox),
                     children![(Pickable::IGNORE, Text(item.clone()),)],
                 ))
+                .observe(on_click_task)
                 .observe(on_over_task)
                 .observe(on_move_task)
                 .observe(on_out_task);
@@ -86,17 +82,34 @@ fn on_assigned_task(
     }
 }
 
+fn on_click_task(
+    mut event: On<PointerClick>,
+    mut commands: Commands,
+    postit: Single<Entity, With<PostitPhysics>>,
+) {
+    event.propagate(false);
+    commands.trigger(DialogueFinished);
+    commands.entity(*postit).despawn();
+}
+
 fn on_over_task(
     mut event: On<PointerOver>,
     mut commands: Commands,
     mut cursor: Single<(Entity, Option<&mut CursorIcon>), With<Window>>,
     mut query: Single<(&mut PostitHovered, &mut PostitPhysics)>,
+    postit: Single<&RelativeCursorPosition, With<Postit>>,
 ) {
     event.propagate(false);
 
     // Set physics
     query.1.enabled = false;
     query.1.elapsed = 0.;
+
+    let Some(diff) = postit.normalized else {
+        return;
+    };
+
+    query.1.angle = -atan2(diff.x, (diff.y + 0.5).min(0.5)).to_degrees();
 
     // Set hovered
     query.0.0 = true;
@@ -112,7 +125,7 @@ fn on_over_task(
 
 fn on_move_task(
     mut event: On<PointerMove>,
-    mut physics: Single<&mut PostitPhysics>,
+    mut physics: Single<&mut PostitPhysics, With<PostitHovered>>,
     postit: Single<&RelativeCursorPosition, With<Postit>>,
 ) {
     event.propagate(false);
@@ -176,7 +189,7 @@ fn update_postit_hovered(time: Res<Time>, query: Query<(&mut PostitHovered, &mut
 #[derive(Component)]
 struct PostitEntering(f32);
 
-const POSTIT_ENTERING_TIME: f32 = 2.0;
+const POSTIT_ENTERING_TIME: f32 = 1.5;
 
 fn update_postit_entering(
     time: Res<Time>,
@@ -190,7 +203,8 @@ fn update_postit_entering(
             commands
                 .entity(entity)
                 .remove::<PostitEntering>()
-                .insert(PostitHovered(false, 0.));
+                .insert(PostitHovered(false, 0.))
+                .insert(Pickable::default());
         } else {
             trans.scale = Vec2::splat(
                 EaseFunction::ElasticOut.sample_unchecked(entering.0 / POSTIT_ENTERING_TIME),
@@ -236,7 +250,7 @@ fn update_postit(time: Res<Time>, query: Query<(&mut PostitPhysics, &mut UiTrans
         } else {
             physics.real_angle = physics
                 .real_angle
-                .lerp(physics.angle, time.delta_secs() * 2.);
+                .lerp(physics.angle, time.delta_secs() * 3.);
             ui.rotation = Rot2::degrees(physics.real_angle);
         }
     }
