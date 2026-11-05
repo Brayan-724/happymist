@@ -4,11 +4,12 @@ use bevy::{log, prelude::*};
 
 use crate::dialogue::{Dialogue, DialogueAnimated, DialogueId, NextDialogue};
 use crate::game::{GameState, level::LevelProgress};
+use crate::player::{Player, PlayerCurrentTask};
 
 use self::loader::{ClientAsset, ClientAssetLoader, ClientTaskRequestAsset};
 use self::task::TaskId;
 
-mod loader;
+pub mod loader;
 pub mod task;
 
 pub fn plugin(app: &mut App) {
@@ -46,15 +47,6 @@ impl Client {
 pub struct ClientDetails {
     pub name: String,
 }
-
-#[derive(Component, Clone, Debug)]
-pub struct ClientTask(pub TaskId, pub ClientTaskRequestAsset);
-
-#[derive(Component, Clone, Debug)]
-pub struct ClientTasks(pub Vec<ClientTaskRequestAsset>);
-
-#[derive(Component, Clone, Copy, Debug)]
-pub struct ClientCurrentTask(pub usize);
 
 #[derive(Component)]
 pub struct LoadedClient(Handle<ClientAsset>);
@@ -122,7 +114,6 @@ fn setup_client(
 
         commands.entity(entity).insert((
             ClientApproaching::default(),
-            ClientTasks(vec![]),
             Sprite {
                 image: assets.load(client.sprite.clone()),
                 custom_size: Some(vec2(50., 50.)),
@@ -207,6 +198,7 @@ fn on_client_approached(
 fn on_next_dialogue(
     event: On<NextDialogue>,
     mut commands: Commands,
+    player: Single<Entity, With<Player>>,
     client: Single<(Entity, &ClientDetails, &LoadedClient)>,
     query_dialogues: Query<&DialogueId>,
     assets: Res<Assets<ClientAsset>>,
@@ -239,8 +231,8 @@ fn on_next_dialogue(
         ));
     } else if let Some(task) = client_asset.tasks.get(dialogue_id.0.0) {
         commands
-            .entity(client_entity)
-            .insert(ClientTask(dialogue_id.0, task.request.clone()));
+            .entity(*player)
+            .insert(PlayerCurrentTask(task.request.clone()));
         commands.trigger(DialogueFinished);
     }
 }

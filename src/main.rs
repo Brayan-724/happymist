@@ -5,9 +5,11 @@ use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
 mod client;
 mod dialogue;
+mod ext;
 mod fonts;
 mod game;
 mod main_menu;
+mod player;
 mod scene;
 mod ui;
 
@@ -25,6 +27,7 @@ fn main() -> AppExit {
             dialogue::plugin,
             client::plugin,
             fonts::plugin,
+            player::plugin,
         ))
         .add_systems(Startup, setup)
         .run()
