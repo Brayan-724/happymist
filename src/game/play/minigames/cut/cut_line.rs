@@ -7,7 +7,10 @@ use crate::{
         ActiveMinigame,
         hud::{FallsOnLose, LoseDelay},
     },
-    ui::anim::{FallAway, Launched},
+    ui::{
+        anim::{FallAway, Launched},
+        grab::{Grabbable, hit_area},
+    },
 };
 
 const LINE_WIDTH: f32 = 20.;
@@ -127,6 +130,7 @@ fn spawn_cut_line(
             root.spawn((
                 Name::new("CutStart"),
                 CutKnob::default(),
+                Grabbable::default(),
                 ImageNode::new(assets.load("sprites/ui/Draggable.png")),
                 Node {
                     position_type: PositionType::Absolute,
@@ -141,10 +145,10 @@ fn spawn_cut_line(
                     },
                     ..default()
                 },
+                children![hit_area(KNOB_SIZE)],
             ))
             .observe(on_knob_drag_start)
-            .observe(on_knob_drag)
-            .observe(on_knob_drop);
+            .observe(on_knob_drag);
         });
 }
 
@@ -172,15 +176,11 @@ fn on_knob_drag(
     }
 
     let target = (knob.drag_start + along_line / line_length).clamp(0., 1.);
-    knob.progress = knob.progress.max(target);
-}
-
-fn on_knob_drop(event: On<PointerDragEnd>, mut knobs: Query<&mut CutKnob>) {
-    if let Ok(mut knob) = knobs.get_mut(event.entity)
-        && knob.progress >= CUT_DONE_AT
-    {
-        knob.progress = 1.;
-    }
+    knob.progress = if target >= CUT_DONE_AT {
+        1.
+    } else {
+        knob.progress.max(target)
+    };
 }
 
 fn update(
